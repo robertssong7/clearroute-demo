@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ClearRoute — Find In-Network Emergency Care</title>
+  <meta name="description"
+    content="ClearRoute shows which nearby ERs and urgent care centers are in your insurance network. Green means go.">
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+  <!-- 911 Banner -->
+  <div id="banner-911" class="banner-911">
+    <div class="banner-inner">
+      <span class="banner-icon">🚨</span>
+      <span class="banner-text">If this is a life-threatening emergency, <strong>call 911</strong> immediately.</span>
+      <button class="banner-call-btn" onclick="confirm911()">Call 911</button>
+    </div>
+  </div>
+  <script>
+    function confirm911() {
+      if (confirm('You are about to call 911. This is for life-threatening emergencies only.\n\nProceed with the call?')) {
+        window.location.href = 'tel:911';
+      }
+    }
+  </script>
+
+  <!-- Onboarding Overlay -->
+  <div id="onboarding-overlay" class="onboarding-overlay">
+    <div class="onboarding-card">
+      <div class="step-indicator" id="step-indicator">
+        <div class="step-dot active" data-step="1"></div>
+        <div class="step-dot" data-step="2"></div>
+        <div class="step-dot" data-step="3"></div>
+        <div class="step-dot" data-step="4"></div>
+        <div class="step-dot" data-step="5"></div>
+      </div>
+
+      <!-- Step 0: Profile Selection (Returning Users) -->
+      <div id="step-0" class="onboarding-step">
+        <div class="onboarding-logo" style="margin-bottom: 24px;">
+          <div class="logo-icon">
+            <svg viewBox="0 0 48 48" width="56" height="56">
+              <circle cx="24" cy="24" r="22" fill="none" stroke="url(#g0)" stroke-width="3" />
+              <path d="M24 10L24 38M10 24L38 24" stroke="url(#g0)" stroke-width="3" stroke-linecap="round" />
+              <circle cx="24" cy="24" r="6" fill="url(#g0)" opacity="0.3" />
+              <defs>
+                <linearGradient id="g0" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#22c55e" />
+                  <stop offset="100%" stop-color="#06b6d4" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <h1 class="logo-title">ClearRoute</h1>
+          <p class="logo-subtitle">Who is finding care today?</p>
+        </div>
+        <div id="profile-select-list" style="display:flex; flex-direction:column; gap:12px; margin-bottom: 24px;">
+          <!-- Dynamically populated by JS -->
+        </div>
+        <button class="secondary-btn" style="width:100%;" onclick="startOnboardingForNewMember()">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            style="margin-right:8px; vertical-align:-4px;">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="16" />
+            <line x1="8" y1="12" x2="16" y2="12" />
+          </svg> Add New Member
+        </button>
+      </div>
+
+      <!-- Step 1: Name & Demographics -->
+      <div id="step-1" class="onboarding-step active">
+        <button id="step-1-back" class="back-btn" onclick="showProfileSelection()"
+          style="display:none; margin-bottom: 16px;">← Back to Profiles</button>
+        <h2 class="step-title">Who needs care?</h2>
+        <p class="step-desc">Help us map the right facilities and estimate costs.</p>
+
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px;">Name (or nickname)</label>
+          <input type="text" id="member-name" class="text-input" placeholder="e.g. Sarah, Dad, or Mom"
+            autocomplete="given-name">
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:16px;">
+          <div class="form-group" style="flex:1; margin-bottom:0;">
+            <label class="form-label" style="font-size:11px;">Age Group</label>
+            <select id="member-type" class="select-input">
+              <option value="adult">Adult (18-64)</option>
+              <option value="child">Child / Pediatric</option>
+              <option value="older_adult">Older Adult (65+)</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1; margin-bottom:0;">
+            <label class="form-label" style="font-size:11px;">Pregnant?</label>
+            <select id="member-pregnant" class="select-input">
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="primary-btn" style="width:100%; margin-top:24px;" onclick="submitStep1()">Continue to
+          Insurance</button>
+      </div>
+
+      <!-- Step 2: Insurance Family -->
+      <div id="step-2" class="onboarding-step">
+        <button class="back-btn" onclick="goToStep(1)">← Back</button>
+        <h2 class="step-title">What type of insurance?</h2>
+        <p class="step-desc">This helps determine your likely cost behaviors.</p>
+        <div class="payer-grid" id="family-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Step 3: Brand/Carrier -->
+      <div id="step-3" class="onboarding-step">
+        <button class="back-btn" onclick="goToStep(2)">← Back</button>
+        <h2 class="step-title">Which insurance company?</h2>
+        <p class="step-desc">Select the brand on your card or choose "Not Sure".</p>
+        <div class="payer-grid" id="brand-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Step 4: Plan Structure & Deductible -->
+      <div id="step-4" class="onboarding-step">
+        <button class="back-btn" onclick="goToStep(3)">← Back</button>
+        <h2 class="step-title">Plan details</h2>
+        <p class="step-desc">Used for estimating your out-of-pocket costs.</p>
+
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px;">Plan Type</label>
+          <div class="payer-grid" id="structure-grid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div class="form-group" id="deductible-group">
+          <label class="form-label" style="font-size:11px;">Have you met your deductible this year?</label>
+          <select id="member-deductible" class="select-input">
+            <option value="unsure">Not Sure / Don't Know</option>
+            <option value="not_met">Not Met ($0-25% paid)</option>
+            <option value="partly_met">Partly Met (25%-99% paid)</option>
+            <option value="met">Fully Met (100% paid)</option>
+          </select>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button id="add-another-btn" class="secondary-btn" style="flex:1;" onclick="addAnotherMember()">
+            <span>Add Another Member</span>
+          </button>
+          <button class="primary-btn" style="flex:1;" onclick="submitOnboardingProfile()">Save Profile</button>
+        </div>
+      </div>
+
+      <!-- Step 5: Reason for Visit (Triage) -->
+      <div id="step-5" class="onboarding-step">
+        <button class="back-btn" onclick="goToStep(0)">← Switch Profile</button>
+        <h2 class="step-title">Why are you going in today?</h2>
+        <p class="step-desc">Select a symptom so we can check safety flags and facility capabilities.</p>
+        <div class="payer-grid" id="archetype-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Step 6: Safety Flags / Recommendation -->
+      <div id="step-6" class="onboarding-step">
+        <button class="back-btn" onclick="goToStep(5)">← Back</button>
+        <h2 class="step-title" id="triage-title">Safety Check</h2>
+        <p class="step-desc">Are any of these red flags present?</p>
+        <div id="safety-questions" style="display:flex; flex-direction:column; gap:12px; margin-bottom:24px;">
+          <!-- JS driven checkboxes -->
+        </div>
+        <div id="triage-result"
+          style="padding:16px; border-radius:8px; margin-bottom:24px; border:1px solid rgba(255,255,255,0.1);">
+          <h3 id="triage-recommendation" style="margin-top:0; font-size:16px; font-weight:700;"></h3>
+          <p id="triage-rationale" style="font-size:14px; margin-bottom:0; color:var(--text-light); line-height:1.4;">
+          </p>
+        </div>
+        <button class="primary-btn" style="width:100%;" onclick="completeTriageAndShowMap()">Show map & prices</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Container -->
+  <div id="map-container" class="map-container hidden">
+    <div class="map-topbar">
+      <div class="topbar-left"><span class="topbar-logo">ClearRoute</span></div>
+      <div class="topbar-center"><span id="plan-display" class="plan-badge"></span></div>
+      <div class="topbar-right">
+        <button id="household-btn" class="icon-btn" onclick="toggleHouseholdPanel()" title="Household">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="map" class="map"></div>
+
+    <div id="freshness-bar" class="freshness-bar"><span id="freshness-text"></span></div>
+
+    <div class="map-legend">
+      <div class="legend-item"><span class="legend-dot green"></span> In-Network</div>
+      <div class="legend-item"><span class="legend-dot grey"></span> Unverified</div>
+      <div class="legend-item"><span class="legend-dot red"></span> Out-of-Network</div>
+    </div>
+
+    <!-- Facility Card -->
+    <div id="facility-card" class="facility-card hidden">
+      <button class="card-close" onclick="closeFacilityCard()">×</button>
+      <div id="card-status-badge" class="card-status-badge"></div>
+      <h3 id="card-name" class="card-name"></h3>
+      <p id="card-type" class="card-type"></p>
+      <p id="card-address" class="card-address"></p>
+      <a id="card-phone-link" class="card-phone-link" href="#" style="display:none"></a>
+      <div class="card-meta">
+        <span id="card-distance" class="card-distance"></span>
+        <span id="card-confidence" class="card-confidence"></span>
+      </div>
+
+      <!-- New Cost Transparency Section -->
+      <div id="card-cost-section"
+        style="margin: 16px 0; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+          <div>
+            <div
+              style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
+              Likely You Pay</div>
+            <div id="card-cost-likely" style="font-size:28px; font-weight:800; color:var(--text-bright);"></div>
+          </div>
+          <div style="text-align:right;">
+            <div
+              style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">
+              Could Be Up To</div>
+            <div id="card-cost-upto" style="font-size:16px; font-weight:600; color:var(--text-light); margin-top:6px;">
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <span id="card-risk-badge"
+            style="font-size:11px; padding:4px 8px; border-radius:4px; font-weight:600;"></span>
+          <span id="card-certainty-badge"
+            style="font-size:11px; padding:4px 8px; border-radius:4px; font-weight:600;"></span>
+        </div>
+      </div>
+
+      <div id="card-wait" class="card-wait hidden"><span class="wait-icon">⏱</span><span id="card-wait-text"></span>
+      </div>
+      <div class="card-verified"><span id="card-verified-text"></span> · <span id="card-sources"></span></div>
+      <div id="er-nudge-section" class="er-nudge-section hidden">
+        <h4>Consider Urgent Care</h4>
+        <div id="er-nudge-text"></div>
+        <div id="er-nudge-list"></div>
+      </div>
+      <div class="card-actions">
+        <a id="card-call" href="#" class="action-btn call-btn"><svg viewBox="0 0 24 24" width="18" height="18"
+            fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+          </svg>Call</a>
+        <button id="card-directions" class="action-btn directions-btn" onclick="openDirections()"><svg
+            viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="3 11 22 2 13 21 11 13 3 11" />
+          </svg>Directions</button>
+        <button id="card-report" class="action-btn report-btn" onclick="reportIncorrect()"><svg viewBox="0 0 24 24"
+            width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+            <line x1="4" y1="22" x2="4" y2="15" />
+          </svg>Report</button>
+      </div>
+    </div>
+
+    <!-- Household Panel -->
+    <div id="household-panel" class="household-panel hidden">
+      <div class="panel-header">
+        <h3>Household Members</h3><button class="panel-close" onclick="toggleHouseholdPanel()">×</button>
+      </div>
+      <div id="member-list" class="member-list"></div>
+      <button class="add-member-btn" onclick="startOnboardingForNewMember()"><svg viewBox="0 0 24 24" width="18"
+          height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="16" />
+          <line x1="8" y1="12" x2="16" y2="12" />
+        </svg>Add Family Member</button>
+    </div>
+
+    <div id="cache-banner" class="cache-banner hidden"><span id="cache-text"></span><button onclick="retryFetch()">Tap
+        to retry</button></div>
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="loader">
+        <div class="loader-ring"></div>
+        <p>Finding nearby facilities...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Member Profile Modal -->
+  <div id="profile-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeProfileModal()"></div>
+    <div class="modal-content" style="max-width: 400px;">
+      <h3 id="profile-modal-title">Member Profile</h3>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom: 20px;">Hospital admission details and insurance
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Full Legal Name</label>
+        <input type="text" id="profile-name" class="text-input" placeholder="Name">
+      </div>
+
+      <div style="display:flex; gap:12px; margin-bottom:16px;">
+        <div class="form-group" style="flex:1; margin-bottom:0;">
+          <label class="form-label">Date of Birth</label>
+          <input type="date" id="profile-dob" class="text-input" style="color-scheme: dark;">
+        </div>
+        <div class="form-group" style="flex:1; margin-bottom:0;">
+          <label class="form-label">Legal Sex</label>
+          <select id="profile-sex" class="select-input">
+            <option value="">Select...</option>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Medical Notes / Allergies</label>
+        <textarea id="profile-notes" class="text-input" rows="3"
+          placeholder="Any critical allergies or conditions a hospital should know..."></textarea>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <label class="form-label" style="margin:0;">Current Insurance</label>
+          <button class="secondary-btn small" onclick="editMemberInsurance()"
+            style="padding: 4px 12px; font-size: 11px;">Update</button>
+        </div>
+        <div id="profile-current-plan"
+          style="font-size: 13px; color: var(--text-light); background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px;">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-top: 24px;">
+        <button class="secondary-btn" style="flex:1;" onclick="closeProfileModal()">Cancel</button>
+        <button class="primary-btn" style="flex:1;" onclick="saveProfile()">Save Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Modal -->
+  <div id="report-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeReportModal()"></div>
+    <div class="modal-content">
+      <h3>Report Incorrect Coverage</h3>
+      <p id="report-facility-name"></p>
+      <div class="form-group"><label class="form-label">What is the correct status?</label>
+        <div class="status-options">
+          <button class="status-option" data-status="in_network" onclick="selectReportStatus(this)"><span
+              class="status-dot green"></span> In-Network</button>
+          <button class="status-option" data-status="out_of_network" onclick="selectReportStatus(this)"><span
+              class="status-dot red"></span> Out-of-Network</button>
+        </div>
+      </div>
+      <button class="primary-btn" onclick="submitReport()">Submit Report</button>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+
+</html>
